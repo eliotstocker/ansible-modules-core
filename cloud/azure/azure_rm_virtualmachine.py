@@ -209,6 +209,13 @@ options:
             - Any other input will be ignored
         default: ['all']
         required: false
+    win_rm:
+        description:
+            - "A Dictionary describing win rm config, Will contain keys: ssl,
+              certificate, vault and store.
+              where ssl is boolean to enable HTTPS, certificate is a string specifying the URL of the certificate in Azure,
+              Vault is a string containing the ID of the Vault containing the SSL, key and secret
+              and store a string with the name of the Certificate store on the VM"
 
 extends_documentation_fragment:
     - azure
@@ -446,7 +453,10 @@ try:
                                           StorageProfile, OSProfile, OSDisk, \
                                           VirtualHardDisk, ImageReference,\
                                           NetworkProfile, LinuxConfiguration, \
-                                          SshConfiguration, SshPublicKey
+                                          SshConfiguration, SshPublicKey, \
+                                          WindowsConfiguration, WinRMConfiguration, \
+                                          WinRMListener, VaultSecretGroup, \
+                                          SourceVault, VaultCertificate
     from azure.mgmt.network.models import PublicIPAddress, NetworkSecurityGroup, NetworkInterface, \
                                           NetworkInterfaceIPConfiguration, Subnet
     from azure.mgmt.storage.models import StorageAccountCreateParameters, Sku
@@ -503,6 +513,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
             allocated=dict(type='bool', default=True),
             restarted=dict(type='bool', default=False),
             started=dict(type='bool', default=True),
+            win_rm=dict(type='dict'),
         )
 
         for key in VirtualMachineSizeTypes:
@@ -536,6 +547,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
         self.restarted = None
         self.started = None
         self.differences = None
+        self.win_rm = None;
 
         self.results = dict(
             changed=False,
@@ -761,6 +773,34 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                         ),
                     )
 
+                    if self.win_rm:
+                        if self.win_rm["ssl"]:
+                            winRm = WinRMConfiguration(
+                                    listeners = [WinRMListener(
+                                            protocol="Http",
+                                            certificateUrl=Null
+                                        ),
+                                        WinRMListener(
+                                            protocol="Https",
+                                            certificateUrl=self.win_rm["certificate"]
+                                        )]
+                            )
+                            vm_resource.os_profile.secrets = VaultSecretGroup(
+                                sourceVault=SourceVault(
+                                    id=self.win_rm["vault"]
+                                ),
+                                vaultCertificates=[VaultCertificate(certificateUrl=self.win_rm["certificate"], certificateStore=self.win_rm["store"])]
+                            )
+                        else:
+                            winRm = WinRMConfiguration(
+                                listeners = [WinRMListener(
+                                    protocol="Http",
+                                    certificateUrl=Null
+                                )]
+                            )
+                        vm_resource.os_profile.windowsConfiguration = WindowsConfiguration(
+                            winRM=winRm
+                        )
                     if self.admin_password:
                         vm_resource.os_profile.admin_password = self.admin_password
 
