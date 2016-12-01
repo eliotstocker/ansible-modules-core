@@ -775,7 +775,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                     if self.win_rm:
                         if self.win_rm["ssl"]:
                             cert_store = "My"
-                            if self.win_rm["store"]:
+                            if "store" in self.win_rm:
                                 cert_store = self.win_rm["store"]
 
                             vm_resource.os_profile.secrets = [VaultSecretGroup(
