@@ -214,7 +214,7 @@ options:
             - "A Dictionary describing win rm config, Will contain keys: ssl, certificate, vault and store.
               where ssl is boolean to enable HTTPS, certificate is a string specifying the URL of the certificate in Azure,
               Vault is a string containing the ID of the Vault containing the SSL, key and secret
-              and store a string with the name of the Certificate store on the VM"
+              and store a string with the name of the Certificate store on the VM, Default: 'My'"
 
 extends_documentation_fragment:
     - azure
@@ -774,11 +774,18 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
 
                     if self.win_rm:
                         if self.win_rm["ssl"]:
+                            cert_store = "My"
+                            if self.win_rm["store"]:
+                                cert_store = self.win_rm["store"]
+
                             vm_resource.os_profile.secrets = [VaultSecretGroup(
                                 source_vault=SubResource(
                                     id=self.win_rm["vault"]
                                 ),
-                                vault_certificates=[VaultCertificate(certificate_url=self.win_rm["certificate"], certificate_store=self.win_rm["store"])]
+                                vault_certificates=[VaultCertificate(
+                                    certificate_url=self.win_rm["certificate"],
+                                    certificate_store=cert_store
+                                )]
                             )]
 
                             vm_resource.os_profile.windows_configuration = WindowsConfiguration(
