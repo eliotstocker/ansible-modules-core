@@ -455,7 +455,8 @@ try:
                                           SshConfiguration, SshPublicKey, \
                                           WindowsConfiguration, WinRMConfiguration, \
                                           WinRMListener, VaultSecretGroup, \
-                                          SubResource, VaultCertificate
+                                          SubResource, VaultCertificate, \
+                                          VirtualHardDisk, AdditionalUnattendContent
     from azure.mgmt.network.models import PublicIPAddress, NetworkSecurityGroup, NetworkInterface, \
                                           NetworkInterfaceIPConfiguration, Subnet
     from azure.mgmt.storage.models import StorageAccountCreateParameters, Sku
@@ -513,6 +514,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
             restarted=dict(type='bool', default=False),
             started=dict(type='bool', default=True),
             win_rm=dict(type='dict'),
+            auto_logon=dict(type='dict'),
         )
 
         for key in VirtualMachineSizeTypes:
@@ -547,6 +549,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
         self.started = None
         self.differences = None
         self.win_rm = None
+        self.auto_logon = None
 
         self.results = dict(
             changed=False,
@@ -829,6 +832,19 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                                     )]
                                 )
                             )
+
+                    if self.auto_logon:
+                        if self.os_type != 'Windows':
+                            self.fail("auto logon can only be enabled on windows servers")
+
+                        if not self.auto_logon.get("user") or not self.auto_logon.get("password"):
+                            self.fail("Parameter error: user and password keys required when enabling autologon.")
+                        vm_resource.os_profile.windows_configuration.additional_unattend_content = [AdditionalUnattendContent(
+                            pass_name="oobesystem",
+                            component_name="Microsoft-Windows-Shell-Setup",
+                            setting_name="AutoLogon",
+                            content="[concat('<AutoLogon><Domain>', variables('vmName'), '</Domain><Username>', "+self.auto_logon["user"]+", '</Username><Password><Value>', "+self.auto_logon["password"]+", '</Value></Password><LogonCount>9999</LogonCount><Enabled>true</Enabled></AutoLogon>')]",
+                        )]
 
                     if self.admin_password:
                         vm_resource.os_profile.admin_password = self.admin_password
