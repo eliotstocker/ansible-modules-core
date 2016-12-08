@@ -32,7 +32,7 @@ description:
       allow the module to create these for you. If you choose not to provide a network interface, the resource group
       must contain a virtual network with at least one subnet.
     - Currently requires an image found in the Azure Marketplace. Use azure_rm_virtualmachineimage_facts module
-      to discover the publisher, offer, sku and version of a particular image.
+      to discover the publisher, offer, sku and version of a particular image or an Azure VHD image URI.
 
 options:
     resource_group:
@@ -115,7 +115,7 @@ options:
         description:
             - "A dictionary describing the Marketplace image used to build the VM. Will contain keys: publisher,
               offer, sku and version. NOTE: set image.version to 'latest' to get the most recent version of a given
-              image."
+              image. alternatively you may specify just the key uri, with the uri of an azure VHD image"
         required: true
     storage_account_name:
         description:
@@ -603,13 +603,14 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                         self.fail(msg)
 
             if self.image:
-                if not self.image.get('publisher') or not self.image.get('offer') or not self.image.get('sku') \
-                   or not self.image.get('version'):
-                    self.error("parameter error: expecting image to contain publisher, offer, sku and version keys.")
-                image_version = self.get_image_version()
-                if self.image['version'] == 'latest':
-                    self.image['version'] = image_version.name
-                    self.log("Using image version {0}".format(self.image['version']))
+                if (not self.image.get('publisher') or not self.image.get('offer') or not self.image.get('sku') \
+                   or not self.image.get('version')) and not self.image.get('uri'):
+                    self.fail("parameter error: expecting image to contain publisher, offer, sku and version keys, or only the uri key")
+                if not self.image.get('uri'):
+                    image_version = self.get_image_version()
+                    if self.image['version'] == 'latest':
+                        self.image['version'] = image_version.name
+                        self.log("Using image version {0}".format(self.image['version']))
 
             if not self.storage_blob_name:
                     self.storage_blob_name = self.name + '.vhd'
@@ -753,7 +754,30 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                         hardware_profile=HardwareProfile(
                             vm_size=self.vm_size
                         ),
-                        storage_profile=StorageProfile(
+                        network_profile=NetworkProfile(
+                            network_interfaces=nics
+                        ),
+                    )
+
+                    if self.image.get('uri'):
+                        if self.image.get('publisher') or self.image.get('offer') or self.image.get('sku') or self.image.get('version'):
+                            self.fail("Image parameter 'url' cant not be set with any other image parameters")
+                        if not self.os_type:
+                            self.fail("os type must be specified when depploying from an image")
+                        vm_resource.storage_profile = StorageProfile(
+                            os_disk=OSDisk(
+                                self.storage_blob_name,
+                                vhd,
+                                DiskCreateOptionTypes.from_image,
+                                caching=self.os_disk_caching,
+                                image=VirtualHardDisk(
+                                    uri = self.image['uri']
+                                ),
+                                os_type=self.os_type,
+                            )
+                        )
+                    else:
+                        vm_resource.storage_profile = StorageProfile(
                             os_disk=OSDisk(
                                 self.storage_blob_name,
                                 vhd,
@@ -765,12 +789,8 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                                 offer=self.image['offer'],
                                 sku=self.image['sku'],
                                 version=self.image['version'],
-                            ),
-                        ),
-                        network_profile=NetworkProfile(
-                            network_interfaces=nics
-                        ),
-                    )
+                            )
+                        )
 
                     if self.win_rm:
                         if self.win_rm["ssl"]:
