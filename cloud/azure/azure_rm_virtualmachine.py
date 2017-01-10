@@ -843,7 +843,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
                             pass_name="oobesystem",
                             component_name="Microsoft-Windows-Shell-Setup",
                             setting_name="AutoLogon",
-                            content="[concat('<AutoLogon><Domain>', variables('vmName'), '</Domain><Username>', "+self.auto_logon["user"]+", '</Username><Password><Value>', "+self.auto_logon["password"]+", '</Value></Password><LogonCount>9999</LogonCount><Enabled>true</Enabled></AutoLogon>')]",
+                            content="<AutoLogon><Domain>"+self.name+"</Domain><Username>"+self.auto_logon["user"]+"</Username><Password><Value>"+self.auto_logon["password"]+"</Value></Password><LogonCount>9999</LogonCount><Enabled>true</Enabled></AutoLogon>",
                         )]
 
                     if self.admin_password:
