@@ -1371,7 +1371,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
 
         if self.security_group:
             try:
-                group = self.get_security_group(self, self.security_group)
+                group = self.get_security_group(self.security_group)
             except Exception as exc:
                 self.fail("Error: fetching security group {0} - {1}".format(self.security_group, str(exc)))
         else:
