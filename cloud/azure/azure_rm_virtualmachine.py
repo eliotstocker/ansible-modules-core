@@ -215,6 +215,16 @@ options:
               where ssl is boolean to enable HTTPS, certificate is a string specifying the URL of the certificate in Azure,
               Vault is a string containing the ID of the Vault containing the SSL, key and secret
               and store a string with the name of the Certificate store on the VM, Default: 'My'"
+        default: null
+    auto_logon:
+        description:
+            - "A dictionary to set an account that will automatically be logged onto the local machine upon boot, user is a string denoting the username
+            and password is a string denoting the password"
+        default: null
+    security_group:
+        description:
+            - "the name of a network security group to add the newly created NIC to, must be in the same region as the server and NIC"
+        default: null
 
 extends_documentation_fragment:
     - azure
@@ -515,6 +525,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
             started=dict(type='bool', default=True),
             win_rm=dict(type='dict'),
             auto_logon=dict(type='dict'),
+            security_group=dict(type='str')
         )
 
         for key in VirtualMachineSizeTypes:
@@ -550,6 +561,7 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
         self.differences = None
         self.win_rm = None
         self.auto_logon = None
+        self.security_group = None
 
         self.results = dict(
             changed=False,
@@ -1269,6 +1281,14 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
             self.fail("Error checking storage account name availability for {0} - {1}".format(name, str(exc)))
         return response.name_available
 
+    def get_security_group(self, name):
+        self.log("Fetching security group {0}".format(name))
+        try:
+            nsg = self.network_client.network_security_groups.get(self.resource_group, name)
+        except Exception as exc:
+            self.fail("Error: fetching network security group {0} - {1}.".format(name, str(exc)))
+        return nsg
+
     def create_default_nic(self):
         '''
         Create a default Network Interface <vm name>01. Requires an existing virtual network
@@ -1349,9 +1369,15 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
         self.results['actions'].append('Created default public IP {0}'.format(self.name + '01'))
         pip = self.create_default_pip(self.resource_group, self.location, self.name, self.public_ip_allocation_method)
 
-        self.results['actions'].append('Created default security group {0}'.format(self.name + '01'))
-        group = self.create_default_securitygroup(self.resource_group, self.location, self.name, self.os_type,
-                                                  self.open_ports)
+        if self.security_group:
+            try:
+                group = self.get_security_group(self, self.security_group)
+            except Exception as exc:
+                self.fail("Error: fetching security group {0} - {1}".format(self.security_group, str(exc)))
+        else:
+            self.results['actions'].append('Created default security group {0}'.format(self.name + '01'))
+            group = self.create_default_securitygroup(self.resource_group, self.location, self.name, self.os_type,
+                                              self.open_ports)
 
         parameters = NetworkInterface(
             location=self.location,
@@ -1364,8 +1390,8 @@ class AzureRMVirtualMachine(AzureRMModuleBase):
         parameters.ip_configurations[0].subnet = Subnet(id=subnet_id)
         parameters.ip_configurations[0].name = 'default'
         parameters.network_security_group = NetworkSecurityGroup(id=group.id,
-                                                                 location=group.location,
-                                                                 resource_guid=group.resource_guid)
+                                                                     location=group.location,
+                                                                     resource_guid=group.resource_guid)
         parameters.ip_configurations[0].public_ip_address = PublicIPAddress(id=pip.id,
                                                                             location=pip.location,
                                                                             resource_guid=pip.resource_guid)
